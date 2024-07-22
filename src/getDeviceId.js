@@ -1,3 +1,4 @@
+// getDeviceId.js
 const { NoVideoInputDevicesError } = require("./errors");
 
 function defaultDeviceIdChooser(filteredDevices, videoDevices, facingMode) {
@@ -10,7 +11,16 @@ function defaultDeviceIdChooser(filteredDevices, videoDevices, facingMode) {
     return rearFacingDevices[0].deviceId;
   }
 
-  // If no rear-facing camera, fallback to the default logic
+  // If no rear-facing camera, fallback to front-facing or default logic
+  const frontFacingDevices = filteredDevices.filter((device) =>
+    /front|user|face/i.test(device.label)
+  );
+
+  if (frontFacingDevices.length > 0) {
+    return frontFacingDevices[0].deviceId;
+  }
+
+  // Fallback to default logic
   if (filteredDevices.length > 0) {
     return filteredDevices[0].deviceId;
   }
@@ -39,10 +49,15 @@ function getDeviceId(
       reject(new NoVideoInputDevicesError());
     }
     enumerateDevices.then((devices) => {
+      // Log connected cameras
+      console.log("📷 Connected video devices:", devices);
+
       // Filter out non-videoinputs
       const videoDevices = devices.filter(
         (device) => device.kind == "videoinput"
       );
+
+      console.log("📷 Available video devices:", videoDevices);
 
       if (videoDevices.length < 1) {
         reject(new NoVideoInputDevicesError());
@@ -55,6 +70,9 @@ function getDeviceId(
       const filteredDevices = videoDevices.filter(({ label }) => {
         return pattern.test(label) && label.includes(cameraId);
       });
+
+      console.log("📷 Filtered video devices:", filteredDevices);
+      console.log("📷 facingMode:", facingMode);
 
       resolve(chooseDeviceId(filteredDevices, videoDevices, facingMode));
     });
