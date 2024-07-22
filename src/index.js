@@ -16,10 +16,10 @@ let workerBlob = createBlob([__inline("../lib/worker.js")], {
   type: "application/javascript",
 });
 
-// Props that are allowed to change dynamicly
+// Props that are allowed to change dynamically
 const propsKeys = ["delay", "legacyMode", "facingMode"];
 
-module.exports = class Reader extends Component {
+class Reader extends Component {
   static propTypes = {
     onScan: PropTypes.func.isRequired,
     onError: PropTypes.func.isRequired,
@@ -35,6 +35,7 @@ module.exports = class Reader extends Component {
     className: PropTypes.string,
     constraints: PropTypes.object,
   };
+
   static defaultProps = {
     delay: 500,
     resolution: 600,
@@ -43,8 +44,6 @@ module.exports = class Reader extends Component {
     constraints: null,
   };
 
-  els = {};
-
   constructor(props) {
     super(props);
 
@@ -52,7 +51,7 @@ module.exports = class Reader extends Component {
       mirrorVideo: false,
     };
 
-    // Bind function to the class
+    // Bind functions to the class
     this.initiate = this.initiate.bind(this);
     this.initiateLegacyMode = this.initiateLegacyMode.bind(this);
     this.check = this.check.bind(this);
@@ -65,6 +64,7 @@ module.exports = class Reader extends Component {
     this.handleWorkerMessage = this.handleWorkerMessage.bind(this);
     this.setRefFactory = this.setRefFactory.bind(this);
   }
+
   componentDidMount() {
     // Initiate web worker execute handler according to mode.
     this.worker = new Worker(URL.createObjectURL(workerBlob));
@@ -76,26 +76,27 @@ module.exports = class Reader extends Component {
       this.initiateLegacyMode();
     }
   }
-  UNSAFE_componentWillReceiveProps(nextProps) {
+
+  componentDidUpdate(prevProps) {
     // React according to change in props
-    const changedProps = havePropsChanged(this.props, nextProps, propsKeys);
+    const changedProps = havePropsChanged(this.props, prevProps, propsKeys);
 
     for (const prop of changedProps) {
-      if (prop == "facingMode") {
+      if (prop === "facingMode") {
         this.clearComponent();
-        this.initiate(nextProps);
+        this.initiate();
         break;
-      } else if (prop == "delay") {
-        if (this.props.delay == false && !nextProps.legacyMode) {
-          this.timeout = setTimeout(this.check, nextProps.delay);
+      } else if (prop === "delay") {
+        if (this.props.delay === false && !this.props.legacyMode) {
+          this.timeout = setTimeout(this.check, this.props.delay);
         }
-        if (nextProps.delay == false) {
+        if (this.props.delay === false) {
           clearTimeout(this.timeout);
         }
-      } else if (prop == "legacyMode") {
-        if (this.props.legacyMode && !nextProps.legacyMode) {
+      } else if (prop === "legacyMode") {
+        if (this.props.legacyMode && !this.props.legacyMode) {
           this.clearComponent();
-          this.initiate(nextProps);
+          this.initiate();
         } else {
           this.clearComponent();
           this.componentDidUpdate = this.initiateLegacyMode;
@@ -104,15 +105,7 @@ module.exports = class Reader extends Component {
       }
     }
   }
-  shouldComponentUpdate(nextProps, nextState) {
-    if (nextState !== this.state) {
-      return true;
-    }
 
-    // Only render when the `propsKeys` have changed.
-    const changedProps = havePropsChanged(this.props, nextProps, propsKeys);
-    return changedProps.length > 0;
-  }
   componentWillUnmount() {
     // Stop web-worker and clear the component
     if (this.worker) {
@@ -121,6 +114,7 @@ module.exports = class Reader extends Component {
     }
     this.clearComponent();
   }
+
   clearComponent() {
     // Remove all event listeners and variables
     if (this.timeout) {
@@ -137,21 +131,24 @@ module.exports = class Reader extends Component {
       this.els.img.removeEventListener("load", this.check);
     }
   }
-  initiate(props = this.props) {
-    const { onError, facingMode, cameraId } = props;
+
+  initiate() {
+    const { onError, facingMode, cameraId } = this.props;
 
     // Check browser facingMode constraint support
     // Firefox ignores facingMode or deviceId constraints
     const isFirefox = /firefox/i.test(navigator.userAgent);
     const isSafari = !!navigator.userAgent.match(/Version\/[\d/]+.*Safari/);
 
+    let constraints = {};
+    let supported = {};
+
     if (
       navigator.mediaDevices &&
       typeof navigator.mediaDevices.getSupportedConstraints === "function"
     ) {
-      const supported = navigator.mediaDevices.getSupportedConstraints();
+      supported = navigator.mediaDevices.getSupportedConstraints();
     }
-    const constraints = {};
 
     if (supported.facingMode) {
       constraints.facingMode = { ideal: facingMode };
@@ -161,9 +158,9 @@ module.exports = class Reader extends Component {
 
       const vConstraintsPromise =
         isSafari || isFirefox
-          ? Promise.resolve(props.constraints || constraints)
+          ? Promise.resolve(this.props.constraints || constraints)
           : getDeviceId(facingMode, undefined, cameraId).then((deviceId) =>
-              Object.assign({}, { deviceId }, props.constraints)
+              Object.assign({}, { deviceId }, this.props.constraints)
             );
 
       vConstraintsPromise
@@ -171,7 +168,7 @@ module.exports = class Reader extends Component {
         .then(this.handleVideo)
         .catch(onError);
     } else {
-      console.error('browser does not support "navigator.mediaDevices"');
+      console.error('Browser does not support "navigator.mediaDevices"');
     }
   }
 
@@ -181,11 +178,11 @@ module.exports = class Reader extends Component {
 
     // Preview element hasn't been rendered so wait for it.
     if (!preview) {
-      return setTimeout(this.handleVideo, 200, stream);
+      return setTimeout(() => this.handleVideo(stream), 200);
     }
 
     // Handle different browser implementations of MediaStreams as src
-    if ((preview || {}).srcObject !== undefined) {
+    if (preview.srcObject !== undefined) {
       preview.srcObject = stream;
     } else if (preview.mozSrcObject !== undefined) {
       preview.mozSrcObject = stream;
@@ -211,27 +208,29 @@ module.exports = class Reader extends Component {
     preview.addEventListener("loadstart", this.handleLoadStart);
 
     this.setState({
-      mirrorVideo: facingMode == "user",
+      mirrorVideo: facingMode === "user",
       streamLabel: streamTrack.label,
     });
   }
+
   handleLoadStart() {
     const { delay, onLoad } = this.props;
     const { mirrorVideo, streamLabel } = this.state;
     const preview = this.els.preview;
     preview.play();
 
-    if (typeof onLoad == "function") {
+    if (typeof onLoad === "function") {
       onLoad({ mirrorVideo, streamLabel });
     }
 
-    if (typeof delay == "number") {
+    if (typeof delay === "number") {
       this.timeout = setTimeout(this.check, delay);
     }
 
     // Some browsers call loadstart continuously
     preview.removeEventListener("loadstart", this.handleLoadStart);
   }
+
   check() {
     const { legacyMode, resolution, delay } = this.props;
     const { preview, canvas, img } = this.els;
@@ -294,15 +293,17 @@ module.exports = class Reader extends Component {
       this.timeout = setTimeout(this.check, delay);
     }
   }
+
   handleWorkerMessage(e) {
     const { onScan, legacyMode, delay } = this.props;
     const decoded = e.data;
     onScan(decoded || null);
 
-    if (!legacyMode && typeof delay == "number" && this.worker) {
+    if (!legacyMode && typeof delay === "number" && this.worker) {
       this.timeout = setTimeout(this.check, delay);
     }
   }
+
   initiateLegacyMode() {
     this.reader = new FileReader();
     this.reader.addEventListener("load", this.handleReaderLoad);
@@ -311,27 +312,32 @@ module.exports = class Reader extends Component {
     // Reset componentDidUpdate
     this.componentDidUpdate = undefined;
 
-    if (typeof this.props.onLoad == "function") {
+    if (typeof this.props.onLoad === "function") {
       this.props.onLoad();
     }
   }
+
   handleInputChange(e) {
     const selectedImg = e.target.files[0];
     this.reader.readAsDataURL(selectedImg);
   }
+
   handleReaderLoad(e) {
     // Set selected image blob as img source
     this.els.img.src = e.target.result;
   }
+
   openImageDialog() {
     // Function to be executed by parent in user action context to trigger img file uploader
     this.els.input.click();
   }
+
   setRefFactory(key) {
     return (element) => {
       this.els[key] = element;
     };
   }
+
   render() {
     const {
       style,
@@ -348,7 +354,9 @@ module.exports = class Reader extends Component {
       width: "100%",
       paddingTop: "100%",
     };
+
     const hiddenStyle = { display: "none" };
+
     const previewStyle = {
       top: 0,
       left: 0,
@@ -358,11 +366,13 @@ module.exports = class Reader extends Component {
       width: "100%",
       height: "100%",
     };
+
     const videoPreviewStyle = {
       ...previewStyle,
       objectFit: "cover",
       transform: this.state.mirrorVideo ? "scaleX(-1)" : undefined,
     };
+
     const imgPreviewStyle = {
       ...previewStyle,
       objectFit: "scale-down",
@@ -383,10 +393,8 @@ module.exports = class Reader extends Component {
     return (
       <section className={className} style={style}>
         <section style={containerStyle}>
-          {!legacyMode && showViewFinder ? (
-            <div style={viewFinderStyle} />
-          ) : null}
-          {legacyMode ? (
+          {!legacyMode && showViewFinder && <div style={viewFinderStyle} />}
+          {legacyMode && (
             <input
               style={hiddenStyle}
               type="file"
@@ -394,7 +402,7 @@ module.exports = class Reader extends Component {
               ref={this.setRefFactory("input")}
               onChange={this.handleInputChange}
             />
-          ) : null}
+          )}
           {legacyMode ? (
             <img
               style={imgPreviewStyle}
@@ -407,10 +415,11 @@ module.exports = class Reader extends Component {
               ref={this.setRefFactory("preview")}
             />
           )}
-
           <canvas style={hiddenStyle} ref={this.setRefFactory("canvas")} />
         </section>
       </section>
     );
   }
-};
+}
+
+module.exports = Reader;
