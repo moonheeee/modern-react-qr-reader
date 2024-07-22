@@ -1,12 +1,24 @@
 const { NoVideoInputDevicesError } = require("./errors");
 
 function defaultDeviceIdChooser(filteredDevices, videoDevices, facingMode) {
+  // Prioritize rear-facing camera if available
+  const rearFacingDevices = filteredDevices.filter((device) =>
+    /rear|back|environment/i.test(device.label)
+  );
+
+  if (rearFacingDevices.length > 0) {
+    return rearFacingDevices[0].deviceId;
+  }
+
+  // If no rear-facing camera, fallback to the default logic
   if (filteredDevices.length > 0) {
     return filteredDevices[0].deviceId;
   }
+
   if (videoDevices.length == 1 || facingMode == "user") {
     return videoDevices[0].deviceId;
   }
+
   return videoDevices[1].deviceId;
 }
 
